@@ -1,0 +1,240 @@
+<template>
+    <div>
+        <svg :width="width" :height="height">
+            <g v-for="(row, rowIndex) in grid" :key="rowIndex">
+                <g v-for="(cell, colIndex) in row" :key="colIndex">
+                    <rect
+                        :x="colIndex * cellSize"
+                        :y="rowIndex * cellSize"
+                        :width="cellSize"
+                        :height="cellSize"
+                        :fill="getColor(cell)"
+                        stroke="#000"
+                        stroke-width="1"
+                        @click.left="getLeftClicked(rowIndex, colIndex)"
+                        @click.right="getRightClicked(rowIndex, colIndex)"
+                    />
+                    <text
+                        v-if="cell.isStart"
+                        :x="colIndex * cellSize + cellSize / 2"
+                        :y="rowIndex * cellSize + cellSize / 2"
+                        text-anchor="middle"
+                        dominant-baseline="middle"
+                        fill="black"
+                    >
+                        {{ getStart(cell) }}
+                    </text>
+                    <text
+                        v-if="cell.isEnd"
+                        :x="colIndex * cellSize + cellSize / 2"
+                        :y="rowIndex * cellSize + cellSize / 2"
+                        text-anchor="middle"
+                        dominant-baseline="middle"
+                        fill="black"
+                    >
+                        {{ getEnd(cell) }}
+                    </text>
+                </g>
+            </g>
+        </svg>     
+    </div>
+    <div>
+        <button @click="getFindPath" style="background-color: aquamarine;">FindPath</button>
+    </div>
+</template>
+<script>
+export default{
+  
+    data(){
+        return {
+            grid: [],
+            width: 1000,
+            height: 720,
+            cols: 15,
+            rows: 15,
+            cellSize: 40,    
+            wall: 30,    
+            start: null,
+            end: null,       
+            openList: [],
+            closeList:[],
+            result:[],
+            resultIndex: 0,
+
+        }
+    },
+    created(){
+        this.initializeSvg();
+    },
+
+    methods:{
+        initializeSvg(){       
+            for(let i = 0; i < this.rows; i++){
+                let row = [];
+                for(let j = 0; j <this.cols; j++){
+                    row.push({isWall: false, isClicked: false, isStart: false, isEnd: false});    
+                }
+                this.grid.push(row);
+            }          
+
+            for(let i = 0; i <this.wall; i++){
+                let randomRow , randomCol
+                do{
+                    randomRow = Math.floor(Math.random() * this.rows)
+                    randomCol = Math.floor(Math.random() * this.cols)
+                }while(this.grid[randomRow][randomCol].isWall)
+                this.grid[randomRow][randomCol].isWall = true
+            }
+        },
+        getColor(cell){
+            return cell.isWall? 'blue' : 'white'
+        },
+        getStart(cell){
+            if(!cell.isClicked){
+                return  'start';
+            }
+        },
+        getEnd(cell){     
+            if(!cell.isClicked){  
+                return 'end'       
+            }    
+        },
+        getLeftClicked(row, col){           
+            if(!this.grid[row][col].isClicked){
+                if(this.start != null){
+                    this.grid[this.start[0]][this.start[1]].isStart = false
+                }
+                this.grid[row][col].isStart = true;
+                this.start = [row, col];
+            }
+        },
+        getRightClicked(row, col){ 
+            document.oncontextmenu = (e) =>{
+                e.preventDefault();
+            }
+            if(!this.grid[row][col].isClicked){     
+                if(this.end != null){
+                    this.grid[this.end[0]][this.end[1]].isEnd = false;
+                }     
+                this.grid[row][col].isEnd = true;  
+                this.end = [row, col];             
+            }
+        },
+        getFindPath() {
+    if (!this.start || !this.end) {
+        console.error("Start or end point is not defined.");
+        return;
+    }
+
+    // Reset previous results
+    this.resetPath();
+
+    const start_x = this.start[0];
+    const start_y = this.start[1];
+    const end_x = this.end[0];
+    const end_y = this.end[1];
+
+    // Perform A* algorithm
+    const openList = [];
+    const closeList = [];
+
+    openList.push({ x: start_x, y: start_y, G: 0, H: 0, F: 0, parent: null });
+
+    while (openList.length > 0) {
+        // Find node with the lowest f cost in the open list
+        let currentNode = openList[0];
+        let currentIndex = 0;
+        for (let i = 1; i < openList.length; i++) {
+            if (openList[i].F < currentNode.F) {
+                currentNode = openList[i];
+                currentIndex = i;
+            }
+        }
+
+        // Move current node from open list to close list
+        openList.splice(currentIndex, 1);
+        closeList.push(currentNode);
+
+        // Check if reached the end node
+        if (currentNode.x === end_x && currentNode.y === end_y) {
+            // Reconstruct path
+            let pathNode = currentNode;
+            while (pathNode.parent) {
+                this.result.push([pathNode.x, pathNode.y]);
+                pathNode = pathNode.parent;
+            }
+            this.result.push([start_x, start_y]);
+            this.result.reverse();
+            break;
+        }
+
+        // Explore neighbors
+        const neighbors = this.getNeighbors(currentNode);
+        for (const neighbor of neighbors) {
+            if (this.isInList(neighbor, closeList) || neighbor.isWall) {
+                continue;
+            }
+
+            const g = currentNode.G + ((neighbor.x - currentNode.x === 0 || neighbor.y - currentNode.y === 0) ? 10 : 14);
+            const h = Math.abs(end_x - neighbor.x) * 10 + Math.abs(end_y - neighbor.y) * 10;
+            const f = g + h;
+
+            if (!this.isInList(neighbor, openList) || g < neighbor.G) {
+                neighbor.G = g;
+                neighbor.H = h;
+                neighbor.F = f;
+                neighbor.parent = currentNode;
+
+                if (!this.isInList(neighbor, openList)) {
+                    openList.push(neighbor);
+                }
+            }
+        }
+    }
+
+    // Mark the path on the grid
+    for (const [x, y] of this.result) {
+        this.grid[x][y].isPath = true;
+    }
+},
+
+resetPath() {
+    this.result = [];
+    for (const row of this.grid) {
+        for (const cell of row) {
+            cell.isPath = false;
+        }
+    }
+},
+
+getNeighbors(node) {
+    const neighbors = [];
+    const { x, y } = node;
+    const deltas = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]; // Possible movements: up, down, left, right, and diagonals
+
+    for (const [dx, dy] of deltas) {
+        const newX = x + dx;
+        const newY = y + dy;
+
+        if (newX >= 0 && newX < this.rows && newY >= 0 && newY < this.cols) {
+            neighbors.push({ x: newX, y: newY });
+        }
+    }
+
+    return neighbors;
+},
+
+isInList(point, list) {
+    return list.some(p => p.x === point.x && p.y === point.y);
+}
+
+    }
+}
+
+</script>
+
+<style>
+text {
+font-size: 20px;
+}
+</style>
